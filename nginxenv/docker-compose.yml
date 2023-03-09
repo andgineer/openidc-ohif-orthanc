@@ -1,0 +1,11 @@
+version: "3.9"
+services:
+  nginx:
+    image: openresty/openresty:alpine-fat
+    volumes:
+        - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+        - ./volumes/logs/nginx:/var/logs/nginx
+    environment:
+        ENV_VAR:
+    ports:
+      - '80:80'

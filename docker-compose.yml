@@ -1,0 +1,85 @@
+version: "3"
+
+networks:
+    cloakednet:
+        name: cloakednet
+ 
+volumes:
+    postgres_data:
+ 
+services:
+
+    postgres:
+        image: postgres
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        environment: 
+            POSTGRES_DB: keycloak
+            POSTGRES_USER: keycloak
+            POSTGRES_PASSWORD: password
+        ports:
+            - 5432:5432
+        networks:
+            - cloakednet
+
+    keycloak:
+        image: jboss/keycloak
+        environment:
+            DB_VENDOR: POSTGRES
+            DB_ADDR: postgres
+            DB_DATABSE: keycloak
+            DB_USER: keycloak
+            DB_SCHEMA: public
+            DB_PASSWORD: password
+            KEYCLOAK_USER: admin
+            KEYCLOAK_PASSWORD: password
+        ports:
+            - 3333:8080
+        depends_on:
+            - postgres
+        networks:
+            - cloakednet
+
+    viewer:
+        build:
+            context: ./docker/ohif
+        image: ohif-openresty
+#        env_file: openid-microsoft-secrets.env
+        env_file: openid-keycloak-secrets.env
+        volumes:
+            - ./docker/ohif/ohif.js:/var/www/html/app-config.js:ro
+            - ./docker/ohif/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+            - ./volumes/logs/nginx:/var/logs/nginx
+        depends_on:
+            - keycloak
+            - orthanc
+        restart: always
+        ports:
+            - '80:80'
+        networks:
+            - cloakednet
+
+    orthanc:
+        image: jodogne/orthanc-plugins:1.5.6
+        hostname: orthanc
+        volumes:
+            - ./docker/orthanc/orthanc.json:/etc/orthanc/orthanc.json:ro
+            - ./volumes/orthanc-db/:/var/lib/orthanc/db/
+        restart: unless-stopped
+        networks:
+            - cloakednet
+
+    nginx:
+        build:
+            context: ./docker/openresty
+        ports:
+            - 3002:3002
+            - 4090:4090
+        volumes: 
+            - ./docker/openresty/nginx.conf:/etc/nginx/conf.d/default.conf
+        depends_on:
+            - keycloak
+            - orthanc
+            - viewer
+        networks:
+            - cloakednet
