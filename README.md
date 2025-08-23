@@ -1,25 +1,27 @@
 # OHIF Viewer with OpenID-Protected PACS Server (Orthanc)
 
-This project implements a secure medical imaging viewer setup that protects the PACS Server using OpenID authentication (compatible with corporate SSO). The solution uses OpenResty (nginx + lua) and Keycloak for OpenID authentication, leveraging the [lua-resty-openidc](https://github.com/zmartzone/lua-resty-openidc) library.
+This project implements a secure medical imaging viewer setup that protects the PACS server using OpenID Connect authentication, compatible with corporate SSO systems. The solution uses OpenResty (nginx + Lua) and Keycloak for authentication, leveraging the [lua-resty-openidc](https://github.com/zmartzone/lua-resty-openidc) library.
 
 ## Features
 
-- Single-host deployment eliminating CORS issues
-- Corporate SSO integration via OpenID
-- Streamlined service proxying through OpenResty
-- OHIF Viewer integration with Orthanc PACS
+- **Single-host deployment** - Eliminates CORS issues by proxying all services through one domain
+- **Corporate SSO integration** - Compatible with existing OpenID Connect providers
+- **Streamlined service proxying through OpenResty** - High-performance nginx + Lua platform
+- **Secure authentication** - Protects PACS server access with session-based authentication
+- **Medical imaging viewer** - Full-featured OHIF viewer with DICOMWeb support
+- **PACS server** - Orthanc with DICOMWeb API for storing and retrieving medical images
 
 ## Architecture
 
 ### CORS Handling
-All services are proxied through a single host (`viewer` container), which combines OpenResty and the OHIF viewer. This approach completely eliminates CORS-related issues by having all services available under one domain.
+All services are proxied through a single host (the `viewer` container), which combines OpenResty and the OHIF viewer. This approach completely eliminates CORS-related issues by serving all services under one domain.
 
 ### Authentication Configuration
-Session timing can be configured through the nginx configuration:
-- Use `session.cookie.renew` to set renewal timing
-- Use `session.cookie.lifetime` to set session duration
+Session timing can be configured in the nginx configuration:
+- `session.cookie.renew` - Sets session renewal timing
+- `session.cookie.lifetime` - Sets total session duration
 
-To set a custom cookie domain:
+To configure a custom cookie domain:
 ```lua
 local session_opts = { cookie = { domain = ".mydomain.com" } }
 ```
@@ -31,12 +33,12 @@ local session_opts = { cookie = { domain = ".mydomain.com" } }
 docker-compose up --build
 ```
 
-**Note:** Initial startup may take a minute while Keycloak initializes its database. If the startup appears to hang, check the logs:
+**Note:** Initial startup may take 1-2 minutes while Keycloak initializes its database. If startup appears to hang, check the logs:
 ```bash
 docker-compose logs -f
 ```
 
-If needed, restart the stack:
+If needed, restart the entire stack:
 ```bash
 docker-compose restart
 ```
@@ -62,11 +64,11 @@ docker-compose restart
 
 ## Access Points
 
-- OHIF Viewer: http://localhost/
+- **OHIF Viewer**: http://localhost/
   - Main viewer interface connected to Orthanc
-- Admin Console: http://localhost/pacs-admin/
+- **Admin Console**: http://localhost/pacs-admin/
   - Use to upload DICOM files (upload button in top right corner)
-- API Example: http://localhost/pacs/series
+- **API Example**: http://localhost/pacs/series
   - Demonstrates Orthanc API access
 
 ## Security Notes
@@ -74,7 +76,7 @@ docker-compose restart
 ### SSL Configuration
 A development SSL key is included in this repository. **DO NOT USE IN PRODUCTION**.
 
-Generate a new SSL key pair for production:
+For production, generate a new SSL key pair:
 ```bash
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     -keyout nginxenv/ssl/nginx.key \
