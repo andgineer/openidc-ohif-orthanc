@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build viewer image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build viewer image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/ohif
+          push: false
+          tags: ohif-openresty:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker
+
+      - name: Validate nginx config
+        run: |
+          docker run --rm \
+            -e OPENID_CLIENT_ID=test \
+            -e OPENID_CLIENT_SECRET=test \
+            -e OPENID_DISCOVERY=http://keycloak:8080/auth/realms/test/.well-known/openid-configuration \
+            -v "$PWD/docker/ohif/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro" \
+            ohif-openresty:ci \
+            /usr/local/openresty/nginx/sbin/nginx -t
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create env file
+        run: |
+          cat > openid-keycloak-secrets.env << 'EOF'
+          OPENID_CLIENT_ID=imaging
+          OPENID_CLIENT_SECRET=ci-test-secret
+          OPENID_DISCOVERY=http://keycloak:8080/auth/realms/imagingrealm/.well-known/openid-configuration
+          EOF
+
+      - name: Create log directory
+        run: mkdir -p volumes/logs/nginx
+
+      - name: Start services
+        run: docker compose up -d --build
+
+      - name: Wait for OHIF viewer
+        run: |
+          echo "Waiting for viewer to be ready..."
+          timeout 180 bash -c '
+            until curl -sf http://localhost/ > /dev/null 2>&1; do
+              sleep 5
+              echo "Still waiting..."
+            done
+          '
+
+      - name: Test OHIF viewer serves HTML
+        run: |
+          RESPONSE=$(curl -sf http://localhost/)
+          echo "$RESPONSE" | grep -qi "html" || \
+            (echo "FAIL: OHIF viewer not serving HTML" && exit 1)
+          echo "PASS: OHIF viewer serves HTML"
+
+      - name: Test /pacs/ requires authentication
+        run: |
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" -L http://localhost/pacs/system)
+          echo "GET /pacs/system → HTTP $STATUS"
+          [[ "$STATUS" == "302" || "$STATUS" == "403" || "$STATUS" == "200" ]] || \
+            (echo "FAIL: unexpected status $STATUS" && exit 1)
+          echo "PASS: /pacs/system responded with $STATUS"
+
+      - name: Test /pacs-admin/ requires authentication
+        run: |
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost/pacs-admin/)
+          echo "GET /pacs-admin/ → HTTP $STATUS"
+          [[ "$STATUS" == "302" || "$STATUS" == "403" ]] || \
+            (echo "FAIL: expected auth redirect, got $STATUS" && exit 1)
+          echo "PASS: /pacs-admin/ requires auth ($STATUS)"
+
+      - name: Test Keycloak is reachable
+        run: |
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:3333/auth/)
+          echo "GET :3333/auth/ → HTTP $STATUS"
+          [[ "$STATUS" == "200" || "$STATUS" == "302" || "$STATUS" == "303" ]] || \
+            (echo "FAIL: Keycloak not reachable, got $STATUS" && exit 1)
+          echo "PASS: Keycloak reachable ($STATUS)"
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
