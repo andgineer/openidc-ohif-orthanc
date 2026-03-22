@@ -32,6 +32,7 @@ jobs:
             --entrypoint /usr/local/openresty/nginx/sbin/nginx \
             --add-host orthanc:127.0.0.1 \
             --add-host keycloak:127.0.0.1 \
+            --tmpfs /var/logs/nginx \
             -e OPENID_CLIENT_ID=test \
             -e OPENID_CLIENT_SECRET=test \
             -e OPENID_DISCOVERY=http://keycloak:8080/auth/realms/test/.well-known/openid-configuration \
