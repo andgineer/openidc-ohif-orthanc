@@ -10,10 +10,10 @@ volumes:
 services:
 
     postgres:
-        image: postgres
+        image: postgres:16-alpine
         volumes:
             - postgres_data:/var/lib/postgresql/data
-        environment: 
+        environment:
             POSTGRES_DB: keycloak
             POSTGRES_USER: keycloak
             POSTGRES_PASSWORD: password
@@ -27,22 +27,27 @@ services:
             resources:
                 limits:
                     memory: 256M
-        ports:
-            - 5432:5432
         networks:
             - cloakednet
 
     keycloak:
-        image: jboss/keycloak
+        image: quay.io/keycloak/keycloak:26.2
+        command: ["start-dev"]
         environment:
-            DB_VENDOR: POSTGRES
-            DB_ADDR: postgres
-            DB_DATABSE: keycloak
-            DB_USER: keycloak
-            DB_SCHEMA: public
-            DB_PASSWORD: password
-            KEYCLOAK_USER: admin
-            KEYCLOAK_PASSWORD: password
+            KC_DB: postgres
+            KC_DB_URL: jdbc:postgresql://postgres/keycloak
+            KC_DB_USERNAME: keycloak
+            KC_DB_PASSWORD: password
+            KEYCLOAK_ADMIN: admin
+            KEYCLOAK_ADMIN_PASSWORD: password
+            KC_HTTP_RELATIVE_PATH: /auth
+            KC_HEALTH_ENABLED: "true"
+        healthcheck:
+            test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 2>/dev/null || exit 1"]
+            interval: 15s
+            timeout: 5s
+            retries: 15
+            start_period: 60s
         ports:
             - 3333:8080
         depends_on:
@@ -61,8 +66,10 @@ services:
             - ./docker/ohif/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
             - ./volumes/logs/nginx:/var/logs/nginx
         depends_on:
-            - keycloak
-            - orthanc
+            keycloak:
+                condition: service_healthy
+            orthanc:
+                condition: service_started
         restart: always
         ports:
             - '80:80'
@@ -70,7 +77,7 @@ services:
             - cloakednet
 
     orthanc:
-        image: jodogne/orthanc-plugins:1.5.6
+        image: orthancteam/orthanc:26.1.0
         hostname: orthanc
         volumes:
             - ./docker/orthanc/orthanc.json:/etc/orthanc/orthanc.json:ro

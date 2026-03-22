@@ -1,4 +1,4 @@
-FROM ohif/viewer:v3.8.16.10895 as builder
+FROM ohif/app:v3.12.0 as builder
 
 FROM openresty/openresty:alpine-fat
 
